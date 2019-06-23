@@ -21,8 +21,18 @@
               <el-input v-model="form.code" placeholder="验证码"></el-input>
             </el-col>
             <el-col :span="10" :offset="2">
-              <el-button @click="handleSendCode">获取验证码</el-button>
+              <!-- <el-button @click="handleSendCode">获取验证码</el-button> -->
+              <el-button
+                @click="handleSendCode"
+                :disabled="!!codeTimer || codeLoading"
+              >
+                {{ codeTimer ? `剩余${codeSecons}秒` : '获取验证码' }}
+              </el-button>
             </el-col>
+          </el-form-item>
+          <el-form-item prop="agree">
+            <el-checkbox v-model="form.agree"></el-checkbox>
+            <span>我已阅读并同意<a href="#">用户协议</a>和<a href="#">隐私条款</a></span>
           </el-form-item>
           <el-form-item>
             <!-- 给组件加 class，会作用到它的根元素 -->
@@ -42,6 +52,7 @@
 <script>
 import axios from 'axios'
 import '@/vendor/gt' // gt.js 会向全局 window 暴露一个函数 initGeetest
+const initCodeSeconds = 60
 
 export default {
   name: 'AppLogin',
@@ -49,7 +60,8 @@ export default {
     return {
       form: { // 表单数据
         mobile: '18801185985',
-        code: ''
+        code: '',
+        agree: '' // 是否同意用户协议
       },
       loginLoading: false, // 登录按钮的 loading 状态
       rules: { // 表单验证规则
@@ -60,9 +72,17 @@ export default {
         code: [
           { required: true, message: '请输入验证码', trigger: 'blur' },
           { len: 6, message: '长度必须为6个字符', trigger: 'blur' }
+        ],
+        agree: [
+          { required: true, message: '请同意用户协议', trigger: 'change' },
+          { pattern: /true/, message: '请同意用户协议', trigger: 'change' }
         ]
       },
-      captchaObj: null // 通过 initGeetest 得到的极验验证码对象
+      captchaObj: null, // 通过 initGeetest 得到的极验验证码对象
+      codeSecons: initCodeSeconds, // 倒计时的时间
+      codeTimer: null, // 倒计时定时器
+      sendMobile: '', // 保存初始化验证码之后发送短信的手机号
+      codeLoading: false
     }
   },
 
@@ -86,6 +106,9 @@ export default {
         url: 'http://ttapi.research.itcast.cn/mp/v1_0/authorizations',
         data: this.form
       }).then(res => { // >= 200 && < 400 的状态码都会进入这里
+        // 登录成功，将接口返回的用户信息数据放到本地存储
+        window.localStorage.setItem('user_info', JSON.stringify(res.data.data))
+
         // Element 提供的 Message 消息提示组件，这也是组件调用的一种形式
         this.$message({
           message: '登录成功',
@@ -107,15 +130,48 @@ export default {
     },
 
     handleSendCode () {
-      const { mobile } = this.form
+      // 校验手机号是否有效
+      this.$refs['ruleForm'].validateField('mobile', errorMessage => {
+        if (errorMessage.trim().length > 0) {
+          return
+        }
 
-      if (this.captchaObj) {
-        return this.captchaObj.verify()
-      }
+        // 手机号码验证通过
+
+        // 验证是否有验证码插件对象
+        if (this.captchaObj) {
+          // 手机号码有效，初始化验证码插件
+          // this.showGeetest()
+          // 如果用户输入的手机号和之前初始化的验证码手机号不一致，就基于当前手机号码重新初始化
+          // 否则，直接 verify 显示
+          if (this.form.mobile !== this.sendMobile) {
+            // 手机号码发送改变，重新初始化验证码插件
+
+            // 重新初始化之前，将原来的验证码插件 DOM 删除
+            document.body.removeChild(document.querySelector('.geetest_panel'))
+
+            // 重新初始化
+            this.showGeetest()
+          } else {
+            // 一致，直接 verify
+            this.captchaObj.verify()
+          }
+        } else {
+          // 这里是第1次的初始化验证码插件
+          this.showGeetest()
+        }
+      })
+    },
+
+    showGeetest () {
+      // 函数中的 function 定义的函数中的 this 指向 window
+
+      // 初始化验证码期间，禁用按钮的点击状态
+      this.codeLoading = true
 
       axios({
         method: 'GET',
-        url: `http://ttapi.research.itcast.cn/mp/v1_0/captchas/${mobile}`
+        url: `http://ttapi.research.itcast.cn/mp/v1_0/captchas/${this.form.mobile}`
       }).then(res => {
         const data = res.data.data
         window.initGeetest({
@@ -128,10 +184,13 @@ export default {
         }, (captchaObj) => {
           this.captchaObj = captchaObj
           // 这里可以调用验证实例 captchaObj 的实例方法
-          captchaObj.onReady(function () {
+          captchaObj.onReady(() => {
             // 只有 ready 了才能显示验证码
+            this.sendMobile = this.form.mobile
             captchaObj.verify()
-          }).onSuccess(function () {
+            // 验证码初始化好了，让 “获取验证码” 按钮可点击
+            this.codeLoading = false
+          }).onSuccess(() => {
             const {
               geetest_challenge: challenge,
               geetest_seccode: seccode,
@@ -141,18 +200,33 @@ export default {
             // 调用 获取短信验证码 (极验 API2）接口，发送短信
             axios({
               method: 'GET',
-              url: `http://ttapi.research.itcast.cn/mp/v1_0/sms/codes/${mobile}`,
+              url: `http://ttapi.research.itcast.cn/mp/v1_0/sms/codes/${this.form.mobile}`,
               params: { // 专门用来传递 query 查询字符串参数
                 challenge,
                 seccode,
                 validate
               }
             }).then(res => {
-              console.log(res.data)
+              // 发送短信之后，开始倒计时
+              this.codeCountDown()
             })
           })
         })
       })
+    },
+
+    /**
+     * 倒计时
+     */
+    codeCountDown () {
+      this.codeTimer = window.setInterval(() => {
+        this.codeSecons--
+        if (this.codeSecons <= 0) {
+          this.codeSecons = initCodeSeconds // 让倒计时时间回到初始状态
+          window.clearInterval(this.codeTimer) // 清除倒计时
+          this.codeTimer = null // 清除倒计时定时器的标志
+        }
+      }, 1000)
     }
   }
 }
