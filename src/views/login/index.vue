@@ -50,7 +50,7 @@
 </template>
 
 <script>
-import axios from 'axios'
+// import axios from 'axios'
 import '@/vendor/gt' // gt.js 会向全局 window 暴露一个函数 initGeetest
 const initCodeSeconds = 60
 
@@ -101,13 +101,13 @@ export default {
 
     submitLogin () {
       this.loginLoading = true
-      axios({
+      this.$http({
         method: 'POST',
-        url: 'http://ttapi.research.itcast.cn/mp/v1_0/authorizations',
+        url: '/authorizations',
         data: this.form
-      }).then(res => { // >= 200 && < 400 的状态码都会进入这里
+      }).then(data => { // >= 200 && < 400 的状态码都会进入这里
         // 登录成功，将接口返回的用户信息数据放到本地存储
-        window.localStorage.setItem('user_info', JSON.stringify(res.data.data))
+        window.localStorage.setItem('user_info', JSON.stringify(data))
 
         // Element 提供的 Message 消息提示组件，这也是组件调用的一种形式
         this.$message({
@@ -169,11 +169,11 @@ export default {
       // 初始化验证码期间，禁用按钮的点击状态
       this.codeLoading = true
 
-      axios({
+      this.$http({
         method: 'GET',
-        url: `http://ttapi.research.itcast.cn/mp/v1_0/captchas/${this.form.mobile}`
-      }).then(res => {
-        const data = res.data.data
+        url: `/captchas/${this.form.mobile}`
+      }).then(data => {
+        // const data = res.data.data
         window.initGeetest({
           // 以下配置参数来自服务端 SDK
           gt: data.gt,
@@ -198,15 +198,15 @@ export default {
             captchaObj.getValidate()
 
             // 调用 获取短信验证码 (极验 API2）接口，发送短信
-            axios({
+            this.$http({
               method: 'GET',
-              url: `http://ttapi.research.itcast.cn/mp/v1_0/sms/codes/${this.form.mobile}`,
+              url: `/sms/codes/${this.form.mobile}`,
               params: { // 专门用来传递 query 查询字符串参数
                 challenge,
                 seccode,
                 validate
               }
-            }).then(res => {
+            }).then(data => {
               // 发送短信之后，开始倒计时
               this.codeCountDown()
             })
