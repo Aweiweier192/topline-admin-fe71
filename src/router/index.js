@@ -52,6 +52,16 @@ const router = new Router({
           name: 'account-setting',
           path: '/account',
           component: () => import('@/views/account')
+        },
+        { // 素材
+          name: 'image',
+          path: '/image',
+          component: () => import('@/views/image')
+        },
+        { // 粉丝概况
+          name: 'fans-overview',
+          path: '/fans/overview',
+          component: () => import('@/views/fans')
         }
       ]
     },
