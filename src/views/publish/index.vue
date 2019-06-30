@@ -27,6 +27,24 @@
         </quill-editor>
       </el-form-item>
       <el-form-item label="封面">
+        <el-radio-group v-model="articleForm.cover.type">
+          <el-radio :label="1">单图</el-radio>
+          <el-radio :label="3">三图</el-radio>
+          <el-radio :label="0">无图</el-radio>
+          <el-radio :label="-1">自动</el-radio>
+        </el-radio-group>
+        <!-- 根据不同的 type 遍历显示上传图片组件 -->
+        <template v-if="articleForm.cover.type > 0">
+          <el-row>
+            <el-col :span="6" v-for="n in articleForm.cover.type" :key="n">
+              <!--
+                UploadImage 中显示的图片受数组项影响
+                UploadImage 中选择了上传图片也会影响绑定的这个数据
+               -->
+              <UploadImage v-model="articleForm.cover.images[n - 1]"></UploadImage>
+            </el-col>
+          </el-row>
+        </template>
       </el-form-item>
       <el-form-item label="频道">
         <!--
@@ -54,6 +72,7 @@
 </template>
 
 <script>
+import UploadImage from './components/upload-image'
 import ArticleChannel from '@/components/article-channel'
 // require styles
 import 'quill/dist/quill.core.css'
@@ -73,7 +92,8 @@ export default {
 
   components: {
     ArticleChannel,
-    quillEditor
+    quillEditor,
+    UploadImage
   },
 
   data () {
@@ -82,8 +102,9 @@ export default {
         title: '', // 标题
         content: '', // 内容
         cover: { // 封面
-          type: 0, // 封面类型 -1:自动，0-无图，1-1张，3-3张
-          images: [] // 图片链接
+          type: 1, // 封面类型 -1:自动，0-无图，1-1张，3-3张
+          images: [ // 图片链接，这里是真正存储图片的数组，图片链接
+          ]
         },
         channel_id: '' // 频道
       },
